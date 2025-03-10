@@ -4,46 +4,41 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.syndicate.deployment.annotations.lambda.LambdaHandler;
 import com.syndicate.deployment.model.RetentionSetting;
+import com.syndicate.deployment.annotations.lambda.LambdaUrlConfig;
+import com.syndicate.deployment.model.lambda.url.AuthType;
 
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 
-@LambdaHandler(
-		lambdaName = "hello_world",
-		roleName = "hello_world-role",
-		isPublishVersion = true,
-		aliasName = "${lambdas_alias_name}",
-		logsExpiration = RetentionSetting.SYNDICATE_ALIASES_SPECIFIED
-)
+@LambdaHandler(lambdaName = "hello_world", roleName = "hello_world-role", isPublishVersion = true, aliasName = "${lambdas_alias_name}", logsExpiration = RetentionSetting.SYNDICATE_ALIASES_SPECIFIED)
+@LambdaUrlConfig(authType = AuthType.NONE)
 public class HelloWorld implements RequestHandler<Map<String, Object>, Map<String, Object>> {
-
-	@Override
-	public Map<String, Object> handleRequest(Map<String, Object> request, Context context) {
-		System.out.println("Received request: " + request);
-
-		// Extract HTTP method and path from the request
-		String httpMethod = (String) request.get("httpMethod");
-		String path = (String) request.get("path");
-
-		// Check if the request matches the /hello GET resource
-		if ("GET".equalsIgnoreCase(httpMethod) && "/hello".equals(path)) {
-			// Return successful response
-			return createResponse(200, "Hello from Lambda");
+	public Map<String, Object> handleRequest(Map<String, Object> event, Context context) {
+		System.out.println("Hello from lambda");
+		String path = (String) event.getOrDefault("rawPath", event.get("path"));
+		Map<String, Object> requestContext = (Map<String, Object>) event.get("requestContext");
+		Map<String, Object> http = requestContext != null ? (Map<String, Object>) requestContext.get("http") : null;
+		String method = http != null ? (String) http.get("method") : (String) event.get("httpMethod");
+		if ("/hello".equals(path) && "GET".equalsIgnoreCase(method)) {
+			return createSuccessResponse();
 		} else {
-			// Return 400 Bad Request error for any other endpoint or method
-			String errorMessage = String.format(
-					"Bad request syntax or unsupported method. Request path: %s. HTTP method: %s",
-					path, httpMethod
-			);
-			return createResponse(400, errorMessage);
+			return createErrorResponse("Bad request syntax or unsupported method. Request path: " + path + ". HTTP method: " + method);
 		}
 	}
 
-	// Utility method to create a response map
-	private Map<String, Object> createResponse(int statusCode, String message) {
-		Map<String, Object> response = new LinkedHashMap<>();
-		response.put("statusCode", statusCode);
-		response.put("message", message);
+	private Map<String, Object> createSuccessResponse() {
+		Map<String, Object> response = new HashMap<>();
+		response.put("statusCode", 200);
+		response.put("headers", Map.of("Content-Type", "application/json"));
+		response.put("body", "{\"statusCode\": 200, \"message\": \"Hello from Lambda\"}");
+		return response;
+	}
+
+	private Map<String, Object> createErrorResponse(String message) {
+		Map<String, Object> response = new HashMap<>();
+		response.put("statusCode", 400);
+		response.put("headers", Map.of("Content-Type", "application/json"));
+		response.put("body", String.format("{\"statusCode\": %d, \"message\": \"%s\"}", 400, message));
 		return response;
 	}
 }
